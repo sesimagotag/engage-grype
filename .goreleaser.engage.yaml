@@ -1,0 +1,79 @@
+# Engage release assets only:
+#   grype_<version>_linux_amd64.deb
+#   grype_<version>_linux_amd64.rpm
+#   grype_<version>_linux_amd64.tar.gz
+#   grype_<version>_windows_amd64.zip
+version: 2
+
+project_name: grype
+
+env:
+  - CGO_ENABLED=0
+
+release:
+  draft: false
+  prerelease: false
+  header: |
+    Engage release of [anchore/grype {{ .Env.UPSTREAM_TAG }}](https://github.com/anchore/grype/releases/tag/{{ .Env.UPSTREAM_TAG }}).
+
+changelog:
+  disable: true
+
+checksum:
+  disable: true
+
+builds:
+  - id: linux-build
+    dir: ./cmd/grype
+    binary: grype
+    tags: [containers_image_openpgp, exclude_graphdriver_btrfs]
+    goos:
+      - linux
+    goarch:
+      - amd64
+    mod_timestamp: &build-timestamp "{{ .CommitTimestamp }}"
+    ldflags: &build-ldflags |
+      -w
+      -s
+      -extldflags '-static'
+      -X main.version={{.Version}}
+      -X main.gitCommit={{.Commit}}
+      -X main.buildDate={{.Date}}
+      -X main.gitDescription={{.Summary}}
+
+  - id: windows-build
+    dir: ./cmd/grype
+    binary: grype
+    goos:
+      - windows
+    goarch:
+      - amd64
+    mod_timestamp: *build-timestamp
+    ldflags: *build-ldflags
+
+archives:
+  - id: linux-archives
+    ids:
+      - linux-build
+    formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+  - id: windows-archives
+    ids:
+      - windows-build
+    formats: [zip]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+nfpms:
+  - ids:
+      - linux-build
+    package_name: grype
+    file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    maintainer: "VusionGroup Engage"
+    homepage: "https://github.com/sesimagotag/engage-grype"
+    description: "A vulnerability scanner for container images and filesystems"
+    license: "Apache 2.0"
+    formats:
+      - deb
+      - rpm
+    bindir: /usr/bin

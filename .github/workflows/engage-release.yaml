@@ -1,0 +1,131 @@
+name: "Engage release"
+
+# Publishes v1.M.P when anchore/grype publishes stable v0.M.P.
+# The tag points at that upstream commit. Assets are only the linux/amd64
+# deb, rpm, and tar.gz packages and the windows/amd64 zip archive.
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_tag:
+        description: "anchore/grype tag (v0.M.P). Empty uses the latest stable tag."
+        required: false
+        type: string
+        default: ""
+  schedule:
+    - cron: "17 6 * * *"
+
+permissions: {}
+
+concurrency:
+  group: engage-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: "Publish engage release"
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The pushed v1 tag carries the upstream commit onto this fork.
+          persist-credentials: true
+          fetch-depth: 1
+
+      - name: Resolve version
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_TAG: ${{ inputs.upstream_tag }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [[ -n "${UPSTREAM_TAG}" ]]; then
+            args+=("${UPSTREAM_TAG}")
+          fi
+          if ! version_env="$(./.github/scripts/engage-release-version.sh "${args[@]}")"; then
+            exit 1
+          fi
+          eval "$version_env"
+          echo "upstream=${upstream}" >> "$GITHUB_OUTPUT"
+          echo "engage=${engage}" >> "$GITHUB_OUTPUT"
+          if gh release view "$engage" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Engage release ${engage} already exists"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "Will publish ${engage} from anchore/grype ${upstream}"
+          fi
+
+      - name: Checkout upstream tag
+        if: steps.version.outputs.skip == 'false'
+        env:
+          UPSTREAM: ${{ steps.version.outputs.upstream }}
+          ENGAGE: ${{ steps.version.outputs.engage }}
+        run: |
+          set -euo pipefail
+          cp .goreleaser.engage.yaml "${RUNNER_TEMP}/goreleaser.engage.yaml"
+          git remote add upstream https://github.com/anchore/grype.git
+          git fetch --depth 1 upstream "refs/tags/${UPSTREAM}"
+          git checkout --force --detach FETCH_HEAD
+          git clean -ffdx
+          head_sha="$(git rev-parse HEAD)"
+          remote_sha="$(git ls-remote --tags origin "refs/tags/${ENGAGE}" | awk '{print $1}')"
+          if [[ -n "${remote_sha}" && "${remote_sha}" != "${head_sha}" ]]; then
+            echo "origin ${ENGAGE} points at ${remote_sha}, want ${head_sha}" >&2
+            exit 1
+          fi
+          if [[ -z "${remote_sha}" ]]; then
+            git tag "${ENGAGE}"
+            git push origin "refs/tags/${ENGAGE}"
+          fi
+
+      - name: Setup Go
+        if: steps.version.outputs.skip == 'false'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build and publish
+        if: steps.version.outputs.skip == 'false'
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        with:
+          distribution: goreleaser
+          version: v2.18.2
+          args: release --clean --config ${{ runner.temp }}/goreleaser.engage.yaml
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GORELEASER_CURRENT_TAG: ${{ steps.version.outputs.engage }}
+          UPSTREAM_TAG: ${{ steps.version.outputs.upstream }}
+
+      - name: Verify release assets
+        if: steps.version.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ENGAGE: ${{ steps.version.outputs.engage }}
+        run: |
+          set -euo pipefail
+          version="${ENGAGE#v}"
+          expected=(
+            "grype_${version}_linux_amd64.deb"
+            "grype_${version}_linux_amd64.rpm"
+            "grype_${version}_linux_amd64.tar.gz"
+            "grype_${version}_windows_amd64.zip"
+          )
+          mapfile -t names < <(gh release view "$ENGAGE" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | sort)
+          printf 'published:\n'
+          printf '  %s\n' "${names[@]}"
+          diff -u <(printf '%s\n' "${expected[@]}" | sort) <(printf '%s\n' "${names[@]}" | sort)
+
+          work="${RUNNER_TEMP}/engage-assets"
+          mkdir -p "$work"
+          gh release download "$ENGAGE" --repo "$GITHUB_REPOSITORY" --dir "$work" --pattern "grype_${version}_linux_amd64.tar.gz"
+          tar -xOf "$work/grype_${version}_linux_amd64.tar.gz" grype > "$work/grype"
+          chmod +x "$work/grype"
+          file "$work/grype" | grep -q 'statically linked'
+          "$work/grype" version | grep -F "$version"
+          gh release download "$ENGAGE" --repo "$GITHUB_REPOSITORY" --dir "$work" --pattern "grype_${version}_windows_amd64.zip"
+          unzip -l "$work/grype_${version}_windows_amd64.zip" | grep -q 'grype.exe'
