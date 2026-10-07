@@ -34,6 +34,18 @@ func must(e sbom.FormatEncoder, err error) sbom.FormatEncoder {
 	return e
 }
 
+func spdxJSON(version string) sbom.FormatEncoder {
+	cfg := spdxjson.DefaultEncoderConfig()
+	cfg.Version = version
+	return must(spdxjson.NewFormatEncoderWithConfig(cfg))
+}
+
+func spdxTagValue(version string) sbom.FormatEncoder {
+	cfg := spdxtagvalue.DefaultEncoderConfig()
+	cfg.Version = version
+	return must(spdxtagvalue.NewFormatEncoderWithConfig(cfg))
+}
+
 func TestCompareSBOMInputToLibResults(t *testing.T) {
 	// get a grype DB
 	store, status, err := grype.LoadVulnerabilityDB(distribution.Config{
@@ -116,6 +128,21 @@ func TestCompareSBOMInputToLibResults(t *testing.T) {
 			image:  "anchore/test_images:vulnerabilities-alpine",
 			format: must(spdxtagvalue.NewFormatEncoderWithConfig(spdxtagvalue.DefaultEncoderConfig())),
 			name:   "alpine-spdx-tag-value",
+		},
+		{
+			image:  "anchore/test_images:vulnerabilities-alpine",
+			format: spdxJSON("2.2"),
+			name:   "alpine-spdx-json-2.2",
+		},
+		{
+			image:  "anchore/test_images:vulnerabilities-alpine",
+			format: spdxTagValue("2.2"),
+			name:   "alpine-spdx-tag-value-2.2",
+		},
+		{
+			image:  "anchore/test_images:vulnerabilities-alpine",
+			format: spdxJSON("3.0"),
+			name:   "alpine-spdx-json-3.0",
 		},
 
 		{

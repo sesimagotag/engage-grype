@@ -83,7 +83,12 @@ func getSBOM(userInput string) (*sbom.SBOM, sbom.FormatID, string, error) {
 }
 
 func readSBOM(reader io.ReadSeeker) (*sbom.SBOM, sbom.FormatID, error) {
-	s, fmtID, _, err := format.Decode(reader)
+	prepared, err := prepareSBOMReader(reader)
+	if err != nil {
+		return nil, "", fmt.Errorf("unable to decode sbom: %w", err)
+	}
+
+	s, fmtID, _, err := format.Decode(prepared)
 	if err != nil {
 		return nil, "", fmt.Errorf("unable to decode sbom: %w", err)
 	}

@@ -76,6 +76,8 @@ grype sbom:./sbom.json
 cat ./sbom.json | grype
 ```
 
+SPDX 2.2 (JSON and tag-value) and SPDX 3.0 (JSON) are accepted on this path, including SPDX 3 documents whose `@context` is a JSON-LD array.
+
 > [!TIP]
 > Check out the [Getting Started guide](https://oss.anchore.com/docs/guides/vulnerability/getting-started/) to explore all of the capabilities and features.
 >
