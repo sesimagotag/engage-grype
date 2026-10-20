@@ -26,9 +26,6 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
-      # The v1 tag points at the upstream commit, whose tree still contains
-      # workflow files this fork deletes. Pushing that tag needs this scope.
-      workflows: write
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -65,6 +62,7 @@ jobs:
       - name: Checkout upstream tag
         if: steps.version.outputs.skip == 'false'
         env:
+          GH_TOKEN: ${{ github.token }}
           UPSTREAM: ${{ steps.version.outputs.upstream }}
           ENGAGE: ${{ steps.version.outputs.engage }}
         run: |
@@ -80,9 +78,15 @@ jobs:
             echo "origin ${ENGAGE} points at ${remote_sha}, want ${head_sha}" >&2
             exit 1
           fi
-          if [[ -z "${remote_sha}" ]]; then
+          if ! git rev-parse -q --verify "refs/tags/${ENGAGE}" >/dev/null; then
             git tag "${ENGAGE}"
-            git push origin "refs/tags/${ENGAGE}"
+          fi
+          if [[ -z "${remote_sha}" ]]; then
+            # The commit is already on engage. Create the tag ref through the
+            # API so git does not upload workflow files this fork deletes.
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f ref="refs/tags/${ENGAGE}" \
+              -f sha="${head_sha}"
           fi
 
       - name: Setup Go
