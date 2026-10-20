@@ -7,25 +7,10 @@ concurrency:
   group: release
   cancel-in-progress: false
 
+# Disabled on this fork. engage-release.yaml is the only workflow that runs.
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: tag the latest commit on main with the given version (prefixed with v)
-        required: true
-      phase:
-        description: the specific workflow phase to run or all
-        required: true
-        default: "all"
-        type: choice
-        options:
-          - "all"
-          - "install-script-only"
-      skip-checks:
-        description: skip the check-gate (release even if checks haven't passed on main)
-        type: boolean
-        default: false
-        required: false
+  push:
+    branches: ["do-not-run"]
 
 jobs:
   version-available:
