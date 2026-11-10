@@ -33,6 +33,7 @@ jobs:
       - name: Resolve latest upstream release
         id: version
         env:
+          FORCE_REBUILD: ${{ github.event_name == 'workflow_dispatch' }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -44,9 +45,16 @@ jobs:
           echo "engage=${engage}" >> "$GITHUB_OUTPUT"
           if gh release view "$engage" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "release_exists=true" >> "$GITHUB_OUTPUT"
-            echo "Engage release ${engage} already exists"
+            if [[ "$FORCE_REBUILD" == "true" ]]; then
+              echo "publish=true" >> "$GITHUB_OUTPUT"
+              echo "Will rebuild and replace existing Engage release ${engage}"
+            else
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              echo "Engage release ${engage} already exists"
+            fi
           else
             echo "release_exists=false" >> "$GITHUB_OUTPUT"
+            echo "publish=true" >> "$GITHUB_OUTPUT"
             echo "Will merge ${upstream} and publish ${engage}"
           fi
 
@@ -67,46 +75,111 @@ jobs:
             git push origin "HEAD:refs/heads/${GITHUB_REF_NAME}"
           fi
 
-      - name: Tag merged Engage commit
-        if: steps.version.outputs.release_exists == 'false'
+      - name: Prepare local release tag
+        id: tag
+        if: steps.version.outputs.publish == 'true'
         env:
           ENGAGE: ${{ steps.version.outputs.engage }}
+          FORCE_REBUILD: ${{ github.event_name == 'workflow_dispatch' }}
           RELEASE_SHA: ${{ steps.sync.outputs.sha }}
         run: |
           set -euo pipefail
           remote_sha="$(git ls-remote --tags origin "refs/tags/${ENGAGE}" | awk '{print $1}')"
-          if [[ -n "${remote_sha}" && "${remote_sha}" != "${RELEASE_SHA}" ]]; then
+          echo "remote_sha=${remote_sha}" >> "$GITHUB_OUTPUT"
+          if [[ -n "${remote_sha}" && "${remote_sha}" != "${RELEASE_SHA}" && "$FORCE_REBUILD" != "true" ]]; then
             echo "origin ${ENGAGE} points at ${remote_sha}, want ${RELEASE_SHA}" >&2
             exit 1
           fi
-          if ! git rev-parse -q --verify "refs/tags/${ENGAGE}" >/dev/null; then
-            git tag "$ENGAGE" "$RELEASE_SHA"
-          fi
-          if [[ -z "${remote_sha}" ]]; then
-            git push origin "refs/tags/${ENGAGE}"
-          fi
+          git tag --force "$ENGAGE" "$RELEASE_SHA"
 
       - name: Setup Go
-        if: steps.version.outputs.release_exists == 'false'
+        if: steps.version.outputs.publish == 'true'
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache: true
 
-      - name: Build and publish
-        if: steps.version.outputs.release_exists == 'false'
+      - name: Build release assets
+        if: steps.version.outputs.publish == 'true'
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           distribution: goreleaser
           version: v2.18.2
-          args: release --clean --config .goreleaser.engage.yaml
+          args: release --clean --skip=publish --config .goreleaser.engage.yaml
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GORELEASER_CURRENT_TAG: ${{ steps.version.outputs.engage }}
           UPSTREAM_TAG: ${{ steps.version.outputs.upstream }}
 
+      - name: Publish or replace release
+        if: steps.version.outputs.publish == 'true'
+        env:
+          ENGAGE: ${{ steps.version.outputs.engage }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_EXISTS: ${{ steps.version.outputs.release_exists }}
+          RELEASE_SHA: ${{ steps.sync.outputs.sha }}
+          REMOTE_SHA: ${{ steps.tag.outputs.remote_sha }}
+          UPSTREAM: ${{ steps.version.outputs.upstream }}
+        run: |
+          set -euo pipefail
+          version="${ENGAGE#v}"
+          assets=(
+            "dist/grype_${version}_linux_amd64.deb"
+            "dist/grype_${version}_linux_amd64.rpm"
+            "dist/grype_${version}_linux_amd64.tar.gz"
+            "dist/grype_${version}_windows_amd64.zip"
+          )
+          for asset in "${assets[@]}"; do
+            test -f "$asset"
+          done
+
+          if [[ -z "$REMOTE_SHA" ]]; then
+            git push origin "refs/tags/${ENGAGE}"
+          elif [[ "$REMOTE_SHA" != "$RELEASE_SHA" ]]; then
+            git push \
+              --force-with-lease="refs/tags/${ENGAGE}:${REMOTE_SHA}" \
+              origin "refs/tags/${ENGAGE}"
+          fi
+
+          notes="${RUNNER_TEMP}/release-notes.md"
+          printf 'Engage release of [anchore/grype %s](https://github.com/anchore/grype/releases/tag/%s).\n' \
+            "$UPSTREAM" "$UPSTREAM" > "$notes"
+
+          if [[ "$RELEASE_EXISTS" == "true" ]]; then
+            mapfile -t existing < <(
+              gh release view "$ENGAGE" --repo "$GITHUB_REPOSITORY" \
+                --json assets --jq '.assets[].name'
+            )
+            expected_names=()
+            for asset in "${assets[@]}"; do
+              expected_names+=("${asset##*/}")
+            done
+            for name in "${existing[@]}"; do
+              keep=false
+              for expected in "${expected_names[@]}"; do
+                if [[ "$name" == "$expected" ]]; then
+                  keep=true
+                  break
+                fi
+              done
+              if [[ "$keep" == "false" ]]; then
+                gh release delete-asset "$ENGAGE" "$name" \
+                  --repo "$GITHUB_REPOSITORY" --yes
+              fi
+            done
+            gh release upload "$ENGAGE" "${assets[@]}" \
+              --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$ENGAGE" --repo "$GITHUB_REPOSITORY" \
+              --title "$ENGAGE" --notes-file "$notes"
+          else
+            gh release create "$ENGAGE" "${assets[@]}" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$ENGAGE" \
+              --notes-file "$notes"
+          fi
+
       - name: Verify release assets
-        if: steps.version.outputs.release_exists == 'false'
+        if: steps.version.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           ENGAGE: ${{ steps.version.outputs.engage }}
