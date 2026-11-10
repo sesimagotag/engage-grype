@@ -15,10 +15,12 @@ func TestSPDXExamplesDecode(t *testing.T) {
 	docs := spdxfixture.ExampleDocuments(t)
 	seenExamples := map[string]struct{}{}
 	seenVersions := map[string]struct{}{}
+	seenReleases := map[string]struct{}{}
 
 	for _, doc := range docs {
 		seenExamples[doc.Example] = struct{}{}
 		seenVersions[doc.Version] = struct{}{}
+		seenReleases[doc.Release] = struct{}{}
 
 		t.Run(doc.Name, func(t *testing.T) {
 			raw, err := os.Open(doc.Path)
@@ -33,6 +35,11 @@ func TestSPDXExamplesDecode(t *testing.T) {
 			require.NotNil(t, decoded)
 			require.Equal(t, sbom.FormatID(doc.FormatID), id)
 			require.Equal(t, doc.Version, version)
+			if doc.Release == spdxfixture.Release301 {
+				body, readErr := os.ReadFile(doc.Path)
+				require.NoError(t, readErr)
+				require.Contains(t, string(body), spdxfixture.Release301)
+			}
 		})
 	}
 
@@ -40,6 +47,10 @@ func TestSPDXExamplesDecode(t *testing.T) {
 	for _, version := range []string{spdxfixture.Version22, spdxfixture.Version23, spdxfixture.Version30} {
 		_, ok := seenVersions[version]
 		require.Truef(t, ok, "software examples include no SPDX %s document", version)
+	}
+	for _, release := range []string{spdxfixture.Release222, spdxfixture.Release231, spdxfixture.Release301} {
+		_, ok := seenReleases[release]
+		require.Truef(t, ok, "software examples include no SPDX %s release document", release)
 	}
 }
 

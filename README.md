@@ -76,7 +76,7 @@ grype sbom:./sbom.json
 cat ./sbom.json | grype
 ```
 
-SPDX 2.2 (JSON and tag-value) and SPDX 3.0 (JSON) are accepted on this path, including SPDX 3 documents whose `@context` is a JSON-LD array.
+Supported inputs include CycloneDX XML 1.0 through 1.7, CycloneDX JSON 1.2 through 1.7, SPDX v2.2.2 and v2.3.1 (JSON and tag-value), and SPDX v3.0.1 (JSON). SPDX 3 documents may use either a string or JSON-LD array `@context`; SPDX 2.x patch releases retain their `SPDX-2.2` and `SPDX-2.3` document identifiers.
 
 > [!TIP]
 > Check out the [Getting Started guide](https://oss.anchore.com/docs/guides/vulnerability/getting-started/) to explore all of the capabilities and features.

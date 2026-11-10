@@ -1,3 +1,9 @@
 [submodule "test/spdx-examples"]
 	path = test/spdx-examples
 	url = https://github.com/spdx/spdx-examples.git
+[submodule "test/cyclonedx-specification"]
+	path = test/cyclonedx-specification
+	url = https://github.com/CycloneDX/specification.git
+[submodule "test/cyclonedx-bom-examples"]
+	path = test/cyclonedx-bom-examples
+	url = https://github.com/CycloneDX/bom-examples.git

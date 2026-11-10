@@ -8,6 +8,9 @@ permit:
   - WTFPL
 
 ignore-packages:
+  # The SPDX software examples are external test data, not a linked dependency.
+  - github.com/anchore/grype/test/spdx-examples/software
+
   # packageurl-go is released under the MIT license located in the root of the repo at /mit.LICENSE
   - github.com/anchore/packageurl-go
 

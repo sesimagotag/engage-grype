@@ -11,12 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const Version23 = "2.3"
-
 // ExampleDocument is one SPDX file from the spdx-examples software submodule.
 type ExampleDocument struct {
 	Example  string
 	Version  string
+	Release  string
 	FormatID string
 	Path     string
 	Name     string
@@ -68,10 +67,13 @@ func documentsInExample(t testing.TB, root, example string) []ExampleDocument {
 	require.True(t, info.IsDir(), example)
 
 	var docs []ExampleDocument
-	for dirName, version := range map[string]string{
-		"spdx2.2": Version22,
-		"spdx2.3": Version23,
-		"spdx3.0": Version30,
+	for dirName, specification := range map[string]struct {
+		version string
+		release string
+	}{
+		"spdx2.2": {version: Version22, release: Release222},
+		"spdx2.3": {version: Version23, release: Release231},
+		"spdx3.0": {version: Version30, release: Release301},
 	} {
 		versionDir := filepath.Join(exampleDir, dirName)
 		entries, err := os.ReadDir(versionDir)
@@ -90,7 +92,8 @@ func documentsInExample(t testing.TB, root, example string) []ExampleDocument {
 			rel := filepath.Join(example, dirName, entry.Name())
 			docs = append(docs, ExampleDocument{
 				Example:  example,
-				Version:  version,
+				Version:  specification.version,
+				Release:  specification.release,
 				FormatID: formatID,
 				Path:     filepath.Join(versionDir, entry.Name()),
 				Name:     filepath.ToSlash(rel),

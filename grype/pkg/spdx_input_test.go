@@ -40,7 +40,9 @@ func TestNormalizeSPDX3Context(t *testing.T) {
 }
 
 func TestSPDXDocumentsDecodeAtDeclaredVersion(t *testing.T) {
+	seenReleases := make(map[string]struct{})
 	for _, sample := range spdxfixture.Samples(t) {
+		seenReleases[sample.Release] = struct{}{}
 		t.Run(sample.Name, func(t *testing.T) {
 			if sample.ArrayContext {
 				_, _, _, err := format.Decode(bytes.NewReader(sample.Body))
@@ -56,8 +58,23 @@ func TestSPDXDocumentsDecodeAtDeclaredVersion(t *testing.T) {
 			require.Equal(t, sbom.FormatID(sample.FormatID), id)
 			require.Equal(t, sample.Version, version)
 			require.Equal(t, len(spdxfixture.ExpectedPackages()), decoded.Artifacts.Packages.PackageCount())
+			if sample.Release == spdxfixture.Release301 {
+				require.Contains(t, string(sample.Body), spdxfixture.Release301)
+			}
 		})
 	}
+	require.ElementsMatch(t,
+		[]string{spdxfixture.Release222, spdxfixture.Release231, spdxfixture.Release301},
+		mapKeys(seenReleases),
+	)
+}
+
+func mapKeys(values map[string]struct{}) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	return keys
 }
 
 func TestSPDXDocumentsProvidePackages(t *testing.T) {
