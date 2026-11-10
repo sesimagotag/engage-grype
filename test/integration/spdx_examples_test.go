@@ -11,7 +11,7 @@ import (
 )
 
 func TestSPDXExampleDocumentsScan(t *testing.T) {
-	provider := newMockDbProvider()
+	provider := newSPDXMockDBProvider()
 	for _, doc := range spdxfixture.ExampleDocuments(t) {
 		t.Run(doc.Name, func(t *testing.T) {
 			matches, _, _, err := grype.FindVulnerabilities(provider, "sbom:"+doc.Path, source.SquashedScope, nil)

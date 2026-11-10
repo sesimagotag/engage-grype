@@ -1,7 +1,3 @@
-[submodule "test/quality/vulnerability-match-labels"]
-	path = test/quality/vulnerability-match-labels
-	url = https://github.com/anchore/vulnerability-match-labels.git
-	branch = main
 [submodule "test/spdx-examples"]
 	path = test/spdx-examples
 	url = https://github.com/spdx/spdx-examples.git

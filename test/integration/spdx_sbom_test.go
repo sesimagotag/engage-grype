@@ -25,7 +25,7 @@ func TestSPDXSBOMMatches(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "sbom"+sample.Extension)
 			require.NoError(t, os.WriteFile(path, sample.Body, 0o600))
 
-			matches, _, _, err := grype.FindVulnerabilities(newMockDbProvider(), "sbom:"+path, source.SquashedScope, nil)
+			matches, _, _, err := grype.FindVulnerabilities(newSPDXMockDBProvider(), "sbom:"+path, source.SquashedScope, nil)
 			require.NoError(t, err)
 
 			got := strset.New()
