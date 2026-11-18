@@ -28,7 +28,10 @@ if git merge-base --is-ancestor "$upstream_sha" HEAD; then
 fi
 
 set +e
-git merge --no-ff --no-commit "$upstream_sha"
+git \
+  -c user.name='github-actions[bot]' \
+  -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+  merge --no-ff --no-commit "$upstream_sha"
 merge_status=$?
 set -e
 
